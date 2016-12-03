@@ -868,6 +868,7 @@ private:
 
     Qt::KeyboardModifiers _urlHintsModifiers;
     bool _showUrlHint;
+    int _selectedUrlHint;
     bool _openLinksByDirectClick;     // Open URL and hosts by single mouse click
 
     bool _ctrlRequiredForDrag; // require Ctrl key for drag selected text

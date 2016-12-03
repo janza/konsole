@@ -72,6 +72,8 @@
 #include "Session.h"
 #include "WindowSystemInfo.h"
 
+#include <cmath>
+
 using namespace Konsole;
 
 #ifndef loc
@@ -360,6 +362,7 @@ TerminalDisplay::TerminalDisplay(QWidget* parent)
     , _hasTextBlinker(false)
     , _urlHintsModifiers(Qt::NoModifier)
     , _showUrlHint(false)
+    , _selectedUrlHint(0)
     , _openLinksByDirectClick(false)
     , _ctrlRequiredForDrag(true)
     , _tripleClickMode(Enum::SelectWholeLine)
@@ -1393,16 +1396,25 @@ void TerminalDisplay::paintFilters(QPainter& painter)
                 region |= r;
             }
 
-            if (_showUrlHint && urlNumber < 10) {
+
+            QString urlNumberString = QString::number(urlNumber);
+            QString filterUrlString = QString::number(_selectedUrlHint);
+
+            if (_showUrlHint && (_selectedUrlHint == 0 || urlNumberString.startsWith(filterUrlString) )) {
                 // Position at the beginning of the URL
                 QRect hintRect(region.rects().first());
-                hintRect.setWidth(r.height());
-                painter.fillRect(hintRect, QColor(0, 0, 0, 128));
+                hintRect.setWidth(2 * r.height());
+                painter.fillRect(hintRect, QColor(250, 189, 47, 255));
+                painter.setPen(QColor(29, 32, 33, 255));
+                QFont font = painter.font();
+                font.setBold(true);
+                painter.setFont(font);
+                painter.drawText(hintRect, Qt::AlignCenter, urlNumberString);
                 painter.setPen(Qt::white);
-                painter.drawRect(hintRect.adjusted(0, 0, -1, -1));
-                painter.drawText(hintRect, Qt::AlignCenter, QString::number(urlNumber));
             }
         }
+
+        if (_showUrlHint) continue;
 
         for (int line = spot->startLine() ; line <= spot->endLine() ; line++) {
             int startColumn = 0;
@@ -3112,20 +3124,43 @@ void TerminalDisplay::scrollScreenWindow(enum ScreenWindow::RelativeScrollMode m
 
 void TerminalDisplay::keyPressEvent(QKeyEvent* event)
 {
-    if (_urlHintsModifiers && event->modifiers() == _urlHintsModifiers) {
-        int hintSelected = event->key() - 0x31;
-        if (hintSelected >= 0 && hintSelected < 10 && hintSelected < _filterChain->hotSpots().count()) {
-            _filterChain->hotSpots().at(hintSelected)->activate();
+    if (event->modifiers() == (Qt::ShiftModifier | Qt::ControlModifier) && event->key() == Qt::Key_X) {
+        processFilters();
+        _showUrlHint = true;
+        _selectedUrlHint = 0;
+        update();
+        return;
+    }
+    if (_showUrlHint) {
+        int pressedKey = event->key();
+        int pressedNumber = pressedKey - Qt::Key_0;
+
+        if (pressedNumber < 0 || pressedNumber >= 10) {
+            if (pressedKey == Qt::Key_Return && _selectedUrlHint != 0) {
+                _filterChain->hotSpots().at(_selectedUrlHint - 1)->activate();
+            }
             _showUrlHint = false;
             update();
             return;
         }
 
-        if (!_showUrlHint) {
-            processFilters();
-            _showUrlHint = true;
-            update();
+        _selectedUrlHint = _selectedUrlHint * 10 + pressedNumber;
+        int hintCount = _filterChain->hotSpots().count();
+
+        int numberOfHintDigits = (int) log10 ((double) hintCount) + 1;
+        int numberOfInputDigits = (int) log10 ((double) _selectedUrlHint) + 1;
+
+        if (numberOfHintDigits == numberOfInputDigits || _selectedUrlHint * 10 > hintCount) {
+            if (_selectedUrlHint > 0 && _selectedUrlHint <= hintCount) {
+                _filterChain->hotSpots().at(_selectedUrlHint - 1)->activate();
+            }
+            _showUrlHint = false;
         }
+
+        processFilters();
+        update();
+
+        return;
     }
 
     _screenWindow->screen()->setCurrentTerminalDisplay(this);
@@ -3154,11 +3189,6 @@ void TerminalDisplay::keyPressEvent(QKeyEvent* event)
 
 void TerminalDisplay::keyReleaseEvent(QKeyEvent *event)
 {
-    if (_showUrlHint) {
-        _showUrlHint = false;
-        update();
-    }
-
     QWidget::keyReleaseEvent(event);
 }
 
