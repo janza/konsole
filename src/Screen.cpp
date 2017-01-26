@@ -636,7 +636,7 @@ void Screen::displayCharacter(unsigned short c)
         return;
     } else if (w == 0) {
         const QChar::Category category = QChar(c).category();
-        if (category != QChar::Mark_NonSpacing && category != QChar::Letter_Other) {
+        if (category != QChar::Mark_NonSpacing && category != QChar::Letter_Other && !QChar::isLowSurrogate(c)) {
             return;
         }
         // Find previous "real character" to try to combine with
@@ -668,7 +668,7 @@ void Screen::displayCharacter(unsigned short c)
             ushort extendedCharLength;
             const ushort* oldChars = ExtendedCharTable::instance.lookupExtendedChar(currentChar.character, extendedCharLength);
             Q_ASSERT(oldChars);
-            if (oldChars) {
+            if (oldChars && extendedCharLength < 3) {
                 Q_ASSERT(extendedCharLength > 1);
                 Q_ASSERT(extendedCharLength < 65535);
                 ushort* chars = new ushort[extendedCharLength + 1];
@@ -1185,7 +1185,8 @@ void Screen::writeToStream(TerminalCharacterDecoder* decoder,
         // this makes it possible to 'select' a trailing new line character after
         // the text on a line.
         if (y == bottom &&
-                copied < count) {
+                copied < count &&
+                !trimTrailingSpaces) {
             Character newLineChar('\n');
             decoder->decodeLine(&newLineChar, 1, 0);
         }
@@ -1257,7 +1258,7 @@ int Screen::copyLineToStream(int line ,
             // ignore trailing white space at the end of the line
             for (int i = length-1; i >= 0; i--)
             {
-                if (data[i].character == ' ')
+                if (QChar(data[i].character).isSpace())
                     length--;
                 else
                     break;
